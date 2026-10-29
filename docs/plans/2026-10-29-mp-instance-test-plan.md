@@ -140,7 +140,35 @@ docker exec <容器名> sh -c "grep -ci 'NewAPICheckin' /config/logs/*.log | tai
 | 凭据加密降级为混淆模式 | 容器内确认 `cryptography` 可用 |
 | 定时任务频繁触发站点风控 | 调大随机延迟上限、降低 cron 频率 |
 
-## 10. 回归防护
+## 10. 实机验证结果（2026-10-29，CloudCone + Docker）
+
+环境：MP 容器 `moviepilot`（`jxxghp/moviepilot-v3:latest`，应用 v3.2.1，Python 3.14.7），
+配置卷 `/config`，PostgreSQL 库，Playwright 浏览器挂载在 `/moviepilot/.cache/ms-playwright`。
+
+安装路径（实测）：
+
+1. `docker cp` 到 `/app/app/plugins/newapicheckin` **不会被加载**——该目录是已安装插件的
+   落地位置，宿主只按数据库里的安装记录加载。
+2. 可行做法：把仓库作为本地插件仓放到 `/config/local-plugins`（结构
+   `plugins.v3/<id>/` + 根目录 `package.v3.json`），并在 `/config/app.env` 增加
+   `PLUGIN_LOCAL_REPO_PATHS=/config/local-plugins`，重启后即可在插件目录中被发现，
+   再调用 `GET /api/v1/plugin/install/NewAPICheckin` 完成安装。
+
+实测发现的两个真实缺陷（离线单测无法发现）：
+
+| 缺陷 | 现象 | 修复 |
+| --- | --- | --- |
+| 插件 API 未声明鉴权方式 | 全部端点 401 `apikey 校验不通过` | 每条 API 声明补 `"auth": "bear"` |
+| 定时服务 kwargs 与调度器参数撞名 | `add_job() got multiple values for argument 'trigger'`，任务注册失败 | kwargs 改用 `source`，与宿主 `trigger` 参数区分 |
+
+修复后实测：插件安装、启用、配置页/详情页/仪表板、账号 CRUD、统计日志、启停回读、
+重载后 API 正常（25 项断言全 PASS）；`GET /scheduler` 显示本插件任务恰好 1 个；
+对模拟 New-API 站点完成端到端签到（余额 500000→1.00 换算正确，日志与统计写入正确）。
+
+遗留：容器内 `/app/app/plugins/newapicheckin` 位于镜像层，容器重建会丢失；持久来源应以
+`/config/local-plugins` 为准。
+
+## 11. 回归防护
 
 每次改动后本地必跑：
 
