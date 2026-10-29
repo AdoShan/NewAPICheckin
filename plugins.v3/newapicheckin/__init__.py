@@ -29,6 +29,8 @@ from .notify import build_statistics_text, build_summary
 from .service import CheckinService
 from .storage import AccountStore
 
+PLUGIN_ID = "NewAPICheckin"
+
 DEFAULT_CONFIG: Dict[str, Any] = {
     "enabled": True,
     "cron": "0 8 * * *",
@@ -50,7 +52,7 @@ class NewAPICheckin(_PluginBase):
     plugin_name = "New-API 自动签到"
     plugin_desc = "为多个 New-API 站点提供定时签到、余额统计与通知推送能力。"
     plugin_icon = "newapicheckin.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.1.0"
     plugin_author = "AdoShan"
     author_url = "https://github.com/AdoShan/NewAPICheckin"
     plugin_config_prefix = "newapicheckin_"
@@ -90,6 +92,11 @@ class NewAPICheckin(_PluginBase):
         if config.get("onlyonce"):
             self.update_config({"onlyonce": False, **merged})
             self.run_checkin(source="手动执行")
+
+        # 配置页输入的凭据只在本次生效，落库后立即从插件配置中抹掉
+        if config.get("new_secret"):
+            merged["new_secret"] = ""
+            self.update_config(merged)
 
     def get_state(self) -> bool:
         """
@@ -301,6 +308,27 @@ class NewAPICheckin(_PluginBase):
                 "summary": "立即为单个账号签到",
             },
             {
+                "path": "/accounts/test",
+                "endpoint": self.test_account_by_id,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "测试账号连通性（配置页按钮）",
+            },
+            {
+                "path": "/accounts/checkin",
+                "endpoint": self.checkin_account_by_id,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "立即为单个账号签到（配置页按钮）",
+            },
+            {
+                "path": "/accounts/remove",
+                "endpoint": self.remove_account,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "删除账号（配置页按钮）",
+            },
+            {
                 "path": "/accounts/{account_id}/balance",
                 "endpoint": self.refresh_balance,
                 "methods": ["POST"],
@@ -430,6 +458,36 @@ class NewAPICheckin(_PluginBase):
             return {"success": True, "message": "账号已删除"}
         return {"success": False, "message": "账号不存在"}
 
+    def test_account_by_id(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        按请求体中的账号 ID 测试连通性，供配置页按钮调用。
+
+        :param payload: 包含 id 的请求体
+        :return: 测试结果
+        """
+        account_id = int(payload.get("id") or 0)
+        return self.test_account(account_id)
+
+    def checkin_account_by_id(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        按请求体中的账号 ID 立即签到，供配置页按钮调用。
+
+        :param payload: 包含 id 的请求体
+        :return: 签到结果
+        """
+        account_id = int(payload.get("id") or 0)
+        return self.checkin_account(account_id)
+
+    def remove_account(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        按请求体中的账号 ID 删除账号，供配置页按钮调用。
+
+        :param payload: 包含 id 的请求体
+        :return: 操作结果
+        """
+        account_id = int(payload.get("id") or 0)
+        return self.delete_account(account_id)
+
     def test_account(self, account_id: int) -> Dict[str, Any]:
         """
         测试账号连通性。
@@ -521,80 +579,380 @@ class NewAPICheckin(_PluginBase):
     # ------------------------------------------------------------------
     # 页面
     # ------------------------------------------------------------------
+    def _account_view(self) -> tuple:
+        """
+        构造账号下拉选项与表格数据，供配置页渲染。
+
+        :return: (选项列表, 表格行)
+        """
+        store = self._ensure_storage()
+        accounts = store.list_accounts()
+        options = [
+            {"title": f"{item.get('name')}（{item.get('base_url')}）", "value": item.get("id")}
+            for item in accounts
+        ]
+        rows = [
+            {
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "base_url": item.get("base_url"),
+                "login_type": "口令登录" if item.get("login_type") == "password" else "会话令牌",
+                "quota": item.get("quota"),
+                "last_checkin_at": item.get("last_checkin_at"),
+                "last_checkin_result": item.get("last_checkin_result"),
+                "enabled": item.get("enabled"),
+            }
+            for item in accounts
+        ]
+        return options, rows
+
+    @staticmethod
+    def _api_call(path: str, body: str, reload: bool = True) -> str:
+        """
+        生成配置页按钮的 onclick 脚本。
+
+        :param path: 插件 API 路径
+        :param body: 请求体 JS 表达式
+        :param reload: 成功后是否刷新页面
+        :return: onclick 脚本文本
+        """
+        return (
+            "function(e) {"
+            f" window.MoviePilotAPI.post('plugin/{PLUGIN_ID}{path}', {body})"
+            ".then(function(r) {"
+            " var ok = r && (r.success === true || (r.data && r.data.success === true));"
+            " var msg = (r && (r.message || (r.data && r.data.message))) || '操作完成';"
+            " if (ok) { alert(msg);"
+            + (" window.location.reload();" if reload else "")
+            + " } else { alert('操作失败：' + msg); }"
+            " }).catch(function(e) { alert('请求失败：' + e); });"
+            "}"
+        )
+
     def get_form(self) -> tuple:
         """
         构造配置页面。
 
         :return: 页面 JSON 与默认配置
         """
+        account_options, account_rows = self._account_view()
+
+        add_body = (
+            "{ name: model.new_name, base_url: model.new_base_url,"
+            " login_type: model.new_login_type || 'session',"
+            " username: model.new_username, password: model.new_secret,"
+            " session_token: model.new_secret, new_api_user: model.new_api_user }"
+        )
+        add_script = self._api_call("/accounts", add_body)
+        test_script = self._api_call("/accounts/test", "{ id: model.account_id }", reload=False)
+        checkin_script = self._api_call("/accounts/checkin", "{ id: model.account_id }", reload=False)
+        remove_script = self._api_call("/accounts/remove", "{ id: model.account_id }")
+        all_script = self._api_call("/checkin", "{}")
+
         form = [
             {
                 "component": "VForm",
                 "content": [
                     {
-                        "component": "VSwitch",
-                        "props": {"model": "enabled", "label": "启用插件"},
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {"model": "enabled", "label": "启用插件"},
+                                    },
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {"model": "notify", "label": "签到完成后发送通知"},
+                                    },
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {"model": "browser_headless", "label": "浏览器兜底使用无头模式"},
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "cron",
+                                            "label": "签到时间（Cron，5 段）",
+                                            "placeholder": "0 8 * * *",
+                                            "hint": "示例 0 8 * * * 表示每天 08:00 触发",
+                                        },
+                                    },
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "checkin_path",
+                                            "label": "签到接口路径",
+                                            "placeholder": "/api/user/self/checkin",
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "max_retries",
+                                            "label": "失败重试次数",
+                                            "type": "number",
+                                        },
+                                    },
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "random_delay_max_seconds",
+                                            "label": "定时任务随机延迟上限（秒）",
+                                            "type": "number",
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "browser_timeout_seconds",
+                                            "label": "浏览器超时时间（秒）",
+                                            "type": "number",
+                                        },
+                                    },
+                                    {
+                                        "component": "VTextField",
+                                        "props": {"model": "proxy", "label": "代理地址（可选）"},
+                                    },
+                                ],
+                            },
+                        ],
                     },
                     {
-                        "component": "VSwitch",
-                        "props": {"model": "notify", "label": "签到完成后发送通知"},
+                        "component": "VDivider",
+                        "props": {"class": "my-2"},
                     },
                     {
-                        "component": "VSwitch",
-                        "props": {"model": "browser_headless", "label": "浏览器兜底使用无头模式"},
-                    },
-                    {
-                        "component": "VTextField",
+                        "component": "VAlert",
                         "props": {
-                            "model": "cron",
-                            "label": "签到时间（Cron，5 段）",
-                            "placeholder": "0 8 * * *",
+                            "type": "info",
+                            "variant": "tonal",
+                            "text": "账号管理：填写下方表单后点击『添加账号』；凭据会以 AES-256-GCM 加密保存在插件数据目录，不会明文留存于配置。",
                         },
                     },
                     {
-                        "component": "VTextField",
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "new_name",
+                                            "label": "账号名称",
+                                            "placeholder": "我的 New-API 站点",
+                                        },
+                                    },
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "new_base_url",
+                                            "label": "站点地址",
+                                            "placeholder": "https://demo.example.com",
+                                        },
+                                    },
+                                    {
+                                        "component": "VSelect",
+                                        "props": {
+                                            "model": "new_login_type",
+                                            "label": "登录方式",
+                                            "items": [
+                                                {"title": "会话令牌（推荐，免验证码）", "value": "session"},
+                                                {"title": "用户名 + 口令", "value": "password"},
+                                            ],
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "new_username",
+                                            "label": "用户名（口令登录时必填）",
+                                        },
+                                    },
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "new_secret",
+                                            "label": "会话令牌 / 口令",
+                                            "type": "password",
+                                            "show-password": "on",
+                                            "hint": "浏览器 Cookie 中的 session 值，或站点口令",
+                                        },
+                                    },
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "new_api_user",
+                                            "label": "New-Api-User（可选）",
+                                            "hint": "使用系统访问令牌时填写用户 ID",
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VBtn",
+                                        "props": {
+                                            "text": "添加账号",
+                                            "color": "primary",
+                                            "variant": "flat",
+                                            "block": True,
+                                            "onclick": add_script,
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 8},
+                                "content": [
+                                    {
+                                        "component": "VSelect",
+                                        "props": {
+                                            "model": "account_id",
+                                            "label": "选择已有账号",
+                                            "items": account_options,
+                                            "clearable": True,
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VBtn",
+                                        "props": {
+                                            "text": "测试连通性",
+                                            "color": "info",
+                                            "variant": "tonal",
+                                            "block": True,
+                                            "onclick": test_script,
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VBtn",
+                                        "props": {
+                                            "text": "立即签到",
+                                            "color": "success",
+                                            "variant": "tonal",
+                                            "block": True,
+                                            "onclick": checkin_script,
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VBtn",
+                                        "props": {
+                                            "text": "删除账号",
+                                            "color": "error",
+                                            "variant": "tonal",
+                                            "block": True,
+                                            "onclick": remove_script,
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "content": [
+                                    {
+                                        "component": "VBtn",
+                                        "props": {
+                                            "text": "全部账号签到",
+                                            "color": "primary",
+                                            "variant": "tonal",
+                                            "block": True,
+                                            "onclick": all_script,
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        "component": "VDataTable",
                         "props": {
-                            "model": "checkin_path",
-                            "label": "签到接口路径",
-                            "placeholder": "/api/user/self/checkin",
+                            "density": "comfortable",
+                            "headers": [
+                                {"title": "ID", "key": "id"},
+                                {"title": "名称", "key": "name"},
+                                {"title": "站点", "key": "base_url"},
+                                {"title": "登录方式", "key": "login_type"},
+                                {"title": "余额", "key": "quota"},
+                                {"title": "最近签到", "key": "last_checkin_at"},
+                                {"title": "结果", "key": "last_checkin_result"},
+                            ],
+                            "items": account_rows,
                         },
-                    },
-                    {
-                        "component": "VTextField",
-                        "props": {
-                            "model": "max_retries",
-                            "label": "失败重试次数",
-                            "type": "number",
-                        },
-                    },
-                    {
-                        "component": "VTextField",
-                        "props": {
-                            "model": "random_delay_max_seconds",
-                            "label": "定时任务随机延迟上限（秒）",
-                            "type": "number",
-                        },
-                    },
-                    {
-                        "component": "VTextField",
-                        "props": {
-                            "model": "browser_timeout_seconds",
-                            "label": "浏览器超时时间（秒）",
-                            "type": "number",
-                        },
-                    },
-                    {
-                        "component": "VTextField",
-                        "props": {"model": "proxy", "label": "代理地址（可选）"},
-                    },
-                    {
-                        "component": "VBtn",
-                        "props": {"text": "保存并立即签到一次", "color": "primary"},
                     },
                 ],
             }
         ]
-        return form, dict(DEFAULT_CONFIG)
+
+        defaults = dict(DEFAULT_CONFIG)
+        defaults.update(
+            {
+                "new_name": "",
+                "new_base_url": "",
+                "new_login_type": "session",
+                "new_username": "",
+                "new_secret": "",
+                "new_api_user": "",
+                "account_id": None,
+            }
+        )
+        return form, defaults
 
     def get_page(self) -> List[Dict[str, Any]]:
         """
