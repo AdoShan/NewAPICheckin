@@ -4,7 +4,7 @@
     "description": "为多个 New-API 站点提供定时签到、余额统计与通知推送能力。",
     "labels": "签到",
     "version": "1.0.0",
-    "icon": "Moviepilot_A.png",
+    "icon": "newapicheckin.png",
     "author": "AdoShan",
     "level": 1,
     "system_version": ">=3.0.0",

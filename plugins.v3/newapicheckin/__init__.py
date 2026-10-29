@@ -49,7 +49,7 @@ class NewAPICheckin(_PluginBase):
 
     plugin_name = "New-API 自动签到"
     plugin_desc = "为多个 New-API 站点提供定时签到、余额统计与通知推送能力。"
-    plugin_icon = "Moviepilot_A.png"
+    plugin_icon = "newapicheckin.png"
     plugin_version = "1.0.0"
     plugin_author = "AdoShan"
     author_url = "https://github.com/AdoShan/NewAPICheckin"
