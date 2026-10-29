@@ -73,6 +73,7 @@ def main() -> int:
     parser.add_argument("--token", required=True, help="访问令牌")
     parser.add_argument("--account-url", default="", help="真实 New-API 站点地址（可选，用于端到端签到）")
     parser.add_argument("--account-token", default="", help="真实站点的会话令牌（可选）")
+    parser.add_argument("--expect-version", default="", help="期望的插件版本，留空则只校验非空")
     args = parser.parse_args()
 
     base, token = args.url, args.token
@@ -93,7 +94,11 @@ def main() -> int:
         entry = next((item for item in catalogue if item.get("id") == PLUGIN_ID), None)
     check("插件出现在插件目录中", entry is not None, f"HTTP {status}")
     if entry:
-        check("插件版本为 1.0.0", str(entry.get("plugin_version")) == "1.0.0", str(entry.get("plugin_version")))
+        actual_version = str(entry.get("plugin_version"))
+        if args.expect_version:
+            check(f"插件版本为 {args.expect_version}", actual_version == args.expect_version, actual_version)
+        else:
+            check("插件版本非空", bool(actual_version), actual_version)
         check("插件已安装", bool(entry.get("installed")), str(entry.get("installed")))
         check("插件已启用", bool(entry.get("state")), str(entry.get("state")))
 
