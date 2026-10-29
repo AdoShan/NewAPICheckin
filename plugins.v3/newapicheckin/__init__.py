@@ -52,7 +52,7 @@ class NewAPICheckin(_PluginBase):
     plugin_name = "New-API 自动签到"
     plugin_desc = "为多个 New-API 站点提供定时签到、余额统计与通知推送能力。"
     plugin_icon = "newapicheckin.png"
-    plugin_version = "1.1.1"
+    plugin_version = "1.2.2"
     plugin_author = "AdoShan"
     author_url = "https://github.com/AdoShan/NewAPICheckin"
     plugin_config_prefix = "newapicheckin_"
@@ -654,11 +654,16 @@ class NewAPICheckin(_PluginBase):
                 "component": "VForm",
                 "content": [
                     {
+                        "component": "div",
+                        "props": {"class": "text-subtitle-1 mb-2"},
+                        "text": "全局设置",
+                    },
+                    {
                         "component": "VRow",
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 6, "style": "flex: 0 0 50%; max-width: 50%;"},
                                 "content": [
                                     {
                                         "component": "VSwitch",
@@ -676,7 +681,7 @@ class NewAPICheckin(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 6, "style": "flex: 0 0 50%; max-width: 50%;"},
                                 "content": [
                                     {
                                         "component": "VTextField",
@@ -699,7 +704,7 @@ class NewAPICheckin(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 6, "style": "flex: 0 0 50%; max-width: 50%;"},
                                 "content": [
                                     {
                                         "component": "VTextField",
@@ -721,7 +726,7 @@ class NewAPICheckin(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 6, "style": "flex: 0 0 50%; max-width: 50%;"},
                                 "content": [
                                     {
                                         "component": "VTextField",
@@ -744,11 +749,16 @@ class NewAPICheckin(_PluginBase):
                         "props": {"class": "my-2"},
                     },
                     {
+                        "component": "div",
+                        "props": {"class": "text-subtitle-1 mb-2"},
+                        "text": "账号管理",
+                    },
+                    {
                         "component": "VAlert",
                         "props": {
                             "type": "info",
                             "variant": "tonal",
-                            "text": "账号管理：填写下方表单后点击『添加账号』；凭据会以 AES-256-GCM 加密保存在插件数据目录，不会明文留存于配置。",
+                            "text": "填写下方表单后点击『添加账号』；凭据会以 AES-256-GCM 加密保存在插件数据目录，不会明文留存于配置。",
                         },
                     },
                     {
@@ -756,7 +766,7 @@ class NewAPICheckin(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 6, "style": "flex: 0 0 50%; max-width: 50%;"},
                                 "content": [
                                     {
                                         "component": "VTextField",
@@ -789,7 +799,7 @@ class NewAPICheckin(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 6, "style": "flex: 0 0 50%; max-width: 50%;"},
                                 "content": [
                                     {
                                         "component": "VTextField",
@@ -816,21 +826,16 @@ class NewAPICheckin(_PluginBase):
                                             "hint": "使用系统访问令牌时填写用户 ID",
                                         },
                                     },
-                                ],
-                            },
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
-                                "content": [
                                     {
                                         "component": "VBtn",
                                         "props": {
-                                            "text": "添加账号",
                                             "color": "primary",
                                             "variant": "flat",
                                             "block": True,
+                                            "class": "mt-4",
                                             "onclick": add_script,
                                         },
+                                        "text": "添加账号",
                                     },
                                 ],
                             },
@@ -841,7 +846,7 @@ class NewAPICheckin(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 8},
+                                "props": {"cols": 12, "sm": 12, "style": "flex: 0 0 100%; max-width: 100%;"},
                                 "content": [
                                     {
                                         "component": "VSelect",
@@ -856,66 +861,66 @@ class NewAPICheckin(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 3, "style": "flex: 0 0 25%; max-width: 25%;"},
                                 "content": [
                                     {
                                         "component": "VBtn",
                                         "props": {
-                                            "text": "测试连通性",
                                             "color": "info",
                                             "variant": "tonal",
                                             "block": True,
                                             "onclick": test_script,
                                         },
-                                    },
+                                            "text": "测试连通性",
+                                        },
                                 ],
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 3, "style": "flex: 0 0 25%; max-width: 25%;"},
                                 "content": [
                                     {
                                         "component": "VBtn",
                                         "props": {
-                                            "text": "立即签到",
                                             "color": "success",
                                             "variant": "tonal",
                                             "block": True,
                                             "onclick": checkin_script,
                                         },
-                                    },
+                                            "text": "立即签到",
+                                        },
                                 ],
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 3, "style": "flex: 0 0 25%; max-width: 25%;"},
                                 "content": [
                                     {
                                         "component": "VBtn",
                                         "props": {
-                                            "text": "删除账号",
                                             "color": "error",
                                             "variant": "tonal",
                                             "block": True,
                                             "onclick": remove_script,
                                         },
-                                    },
+                                            "text": "删除账号",
+                                        },
                                 ],
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6, "lg": 4},
+                                "props": {"cols": 12, "sm": 3, "style": "flex: 0 0 25%; max-width: 25%;"},
                                 "content": [
                                     {
                                         "component": "VBtn",
                                         "props": {
-                                            "text": "全部账号签到",
                                             "color": "primary",
                                             "variant": "tonal",
                                             "block": True,
                                             "onclick": all_script,
                                         },
-                                    },
+                                            "text": "全部账号签到",
+                                        },
                                 ],
                             },
                         ],
@@ -929,7 +934,7 @@ class NewAPICheckin(_PluginBase):
                                 "props": {
                                     "type": "info",
                                     "variant": "tonal",
-                                    "text": "当前还没有账号。填写上方『账号名称 / 站点地址 / 凭据』后点击『添加账号』即可。",
+                                "text": "当前还没有账号。填写上方『账号名称 / 站点地址 / 凭据』后点击『添加账号』即可。",
                                 },
                             }
                         ]
@@ -1012,7 +1017,7 @@ class NewAPICheckin(_PluginBase):
                     "props": {
                         "type": "warning",
                         "variant": "tonal",
-                        "text": "尚未添加账号。请到插件『配置页』的账号管理区域添加 New-API 站点账号（也可调用插件 API 添加）。",
+                    "text": "尚未添加账号。请到插件『配置页』的账号管理区域添加 New-API 站点账号（也可调用插件 API 添加）。",
                     },
                 }
             )
@@ -1057,7 +1062,7 @@ class NewAPICheckin(_PluginBase):
                     "props": {
                         "type": "warning",
                         "variant": "tonal",
-                        "text": "尚未添加账号，请到插件配置页的『账号管理』区域添加 New-API 站点账号。",
+                    "text": "尚未添加账号，请到插件配置页的『账号管理』区域添加 New-API 站点账号。",
                     },
                 }
             )
