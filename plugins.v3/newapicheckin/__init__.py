@@ -52,7 +52,7 @@ class NewAPICheckin(_PluginBase):
     plugin_name = "New-API 自动签到"
     plugin_desc = "为多个 New-API 站点提供定时签到、余额统计与通知推送能力。"
     plugin_icon = "newapicheckin.png"
-    plugin_version = "1.1.0"
+    plugin_version = "1.1.1"
     plugin_author = "AdoShan"
     author_url = "https://github.com/AdoShan/NewAPICheckin"
     plugin_config_prefix = "newapicheckin_"
@@ -920,6 +920,20 @@ class NewAPICheckin(_PluginBase):
                             },
                         ],
                     },
+                    *(
+                        []
+                        if account_rows
+                        else [
+                            {
+                                "component": "VAlert",
+                                "props": {
+                                    "type": "info",
+                                    "variant": "tonal",
+                                    "text": "当前还没有账号。填写上方『账号名称 / 站点地址 / 凭据』后点击『添加账号』即可。",
+                                },
+                            }
+                        ]
+                    ),
                     {
                         "component": "VDataTable",
                         "props": {
@@ -998,7 +1012,7 @@ class NewAPICheckin(_PluginBase):
                     "props": {
                         "type": "warning",
                         "variant": "tonal",
-                        "text": "尚未添加账号，可通过插件 API 添加 New-API 站点账号。",
+                        "text": "尚未添加账号。请到插件『配置页』的账号管理区域添加 New-API 站点账号（也可调用插件 API 添加）。",
                     },
                 }
             )
@@ -1035,20 +1049,35 @@ class NewAPICheckin(_PluginBase):
                     "text": build_statistics_text(statistics),
                 },
             },
-            {
-                "component": "VTable",
-                "props": {
-                    "items": rows,
-                    "headers": [
-                        {"title": "账号", "key": "name"},
-                        {"title": "站点", "key": "base_url"},
-                        {"title": "余额", "key": "quota"},
-                        {"title": "最近签到", "key": "last_checkin_at"},
-                        {"title": "结果", "key": "last_checkin_result"},
-                    ],
-                },
-            },
         ]
+        if not rows:
+            page.append(
+                {
+                    "component": "VAlert",
+                    "props": {
+                        "type": "warning",
+                        "variant": "tonal",
+                        "text": "尚未添加账号，请到插件配置页的『账号管理』区域添加 New-API 站点账号。",
+                    },
+                }
+            )
+        else:
+            page.append(
+                {
+                    "component": "VDataTable",
+                    "props": {
+                        "density": "compact",
+                        "headers": [
+                            {"title": "账号", "key": "name"},
+                            {"title": "站点", "key": "base_url"},
+                            {"title": "余额", "key": "quota"},
+                            {"title": "最近签到", "key": "last_checkin_at"},
+                            {"title": "结果", "key": "last_checkin_result"},
+                        ],
+                        "items": rows,
+                    },
+                }
+            )
         columns = {"cols": 12, "md": 6}
         settings = {"refresh": 300, "border": True, "title": "New-API 签到"}
         return columns, settings, page
