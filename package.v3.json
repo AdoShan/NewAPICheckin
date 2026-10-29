@@ -1,0 +1,15 @@
+{
+  "NewAPICheckin": {
+    "name": "New-API 自动签到",
+    "description": "为多个 New-API 站点提供定时签到、余额统计与通知推送能力。",
+    "labels": "签到",
+    "version": "1.0.0",
+    "icon": "Moviepilot_A.png",
+    "author": "AdoShan",
+    "level": 1,
+    "system_version": ">=3.0.0",
+    "history": {
+      "v1.0.0": "首个版本：多账号管理、定时签到、Cloudflare 浏览器兜底、余额统计与通知推送。"
+    }
+  }
+}
