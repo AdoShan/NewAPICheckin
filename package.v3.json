@@ -3,12 +3,13 @@
     "name": "New-API 自动签到",
     "description": "为多个 New-API 站点提供定时签到、余额统计与通知推送能力。",
     "labels": "签到",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "newapicheckin.png",
     "author": "AdoShan",
     "level": 1,
     "system_version": ">=3.0.0",
     "history": {
+      "v1.0.1": "修复插件 API 默认走 apikey 鉴权导致 401；修复定时服务 kwargs 与 APScheduler trigger 参数冲突导致任务注册失败；新增 /scheduler 自检端点。",
       "v1.0.0": "首个版本：多账号管理、定时签到、Cloudflare 浏览器兜底、余额统计与通知推送。"
     }
   }

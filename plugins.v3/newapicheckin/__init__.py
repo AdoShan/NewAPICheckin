@@ -50,7 +50,7 @@ class NewAPICheckin(_PluginBase):
     plugin_name = "New-API 自动签到"
     plugin_desc = "为多个 New-API 站点提供定时签到、余额统计与通知推送能力。"
     plugin_icon = "newapicheckin.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "AdoShan"
     author_url = "https://github.com/AdoShan/NewAPICheckin"
     plugin_config_prefix = "newapicheckin_"
@@ -89,7 +89,7 @@ class NewAPICheckin(_PluginBase):
 
         if config.get("onlyonce"):
             self.update_config({"onlyonce": False, **merged})
-            self.run_checkin(trigger="手动执行")
+            self.run_checkin(source="手动执行")
 
     def get_state(self) -> bool:
         """
@@ -163,16 +163,16 @@ class NewAPICheckin(_PluginBase):
     # ------------------------------------------------------------------
     # 业务入口
     # ------------------------------------------------------------------
-    def run_checkin(self, trigger: str = "定时任务") -> List[Dict[str, Any]]:
+    def run_checkin(self, source: str = "定时任务") -> List[Dict[str, Any]]:
         """
         执行全部账号签到。
 
-        :param trigger: 触发来源描述
+        :param source: 触发来源描述
         :return: 签到结果列表
         """
         service = self._ensure_service()
         max_delay = int(self._config.get("random_delay_max_seconds") or 0)
-        if max_delay > 0 and trigger == "定时任务":
+        if max_delay > 0 and source == "定时任务":
             delay = random.randint(0, max_delay)
             logger.info(f"[NewAPICheckin] 随机延迟 {delay} 秒后开始签到")
             time.sleep(delay)
@@ -181,7 +181,7 @@ class NewAPICheckin(_PluginBase):
         except Exception as error:  # pylint: disable=broad-except
             logger.error(f"[NewAPICheckin] 签到执行异常：{error}")
             results = []
-        self._notify(results, trigger)
+        self._notify(results, source)
         return results
 
     # ------------------------------------------------------------------
@@ -214,7 +214,7 @@ class NewAPICheckin(_PluginBase):
         event_data = event.event_data or {}
         if event_data.get("action") != "newapi_checkin":
             return
-        results = self.run_checkin(trigger="手动执行")
+        results = self.run_checkin(source="手动执行")
         summary = build_summary(results, trigger="手动执行")
         try:
             self.post_message(title=summary["title"], text=summary["text"])
@@ -244,7 +244,7 @@ class NewAPICheckin(_PluginBase):
                 "name": "New-API 自动签到",
                 "trigger": trigger,
                 "func": self.run_checkin,
-                "kwargs": {"trigger": "定时任务"},
+                "kwargs": {"source": "定时任务"},
             }
         ]
 
@@ -262,60 +262,77 @@ class NewAPICheckin(_PluginBase):
                 "path": "/accounts",
                 "endpoint": self.list_accounts,
                 "methods": ["GET"],
+                "auth": "bear",
                 "summary": "列出签到账号",
             },
             {
                 "path": "/accounts",
                 "endpoint": self.create_account,
                 "methods": ["POST"],
+                "auth": "bear",
                 "summary": "新增签到账号",
             },
             {
                 "path": "/accounts/{account_id}",
                 "endpoint": self.update_account,
                 "methods": ["PUT"],
+                "auth": "bear",
                 "summary": "更新签到账号",
             },
             {
                 "path": "/accounts/{account_id}",
                 "endpoint": self.delete_account,
                 "methods": ["DELETE"],
+                "auth": "bear",
                 "summary": "删除签到账号",
             },
             {
                 "path": "/accounts/{account_id}/test",
                 "endpoint": self.test_account,
                 "methods": ["POST"],
+                "auth": "bear",
                 "summary": "测试账号连通性",
             },
             {
                 "path": "/accounts/{account_id}/checkin",
                 "endpoint": self.checkin_account,
                 "methods": ["POST"],
+                "auth": "bear",
                 "summary": "立即为单个账号签到",
             },
             {
                 "path": "/accounts/{account_id}/balance",
                 "endpoint": self.refresh_balance,
                 "methods": ["POST"],
+                "auth": "bear",
                 "summary": "刷新账号余额",
             },
             {
                 "path": "/checkin",
                 "endpoint": self.checkin_all,
                 "methods": ["POST"],
+                "auth": "bear",
                 "summary": "立即执行全部账号签到",
+            },
+            {
+                "path": "/scheduler",
+                "endpoint": self.get_scheduler_jobs,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "查询插件定时服务注册情况",
             },
             {
                 "path": "/logs",
                 "endpoint": self.list_logs,
                 "methods": ["GET"],
+                "auth": "bear",
                 "summary": "查询签到日志",
             },
             {
                 "path": "/stats",
                 "endpoint": self.get_statistics,
                 "methods": ["GET"],
+                "auth": "bear",
                 "summary": "查询签到统计",
             },
         ]
@@ -458,9 +475,28 @@ class NewAPICheckin(_PluginBase):
 
         :return: 汇总结果
         """
-        results = self.run_checkin(trigger="手动执行")
+        results = self.run_checkin(source="手动执行")
         summary = build_summary(results, trigger="手动执行")
         return {"success": True, "message": summary["text"], "results": results}
+
+    def get_scheduler_jobs(self) -> Dict[str, Any]:
+        """
+        查询宿主调度器中本插件的任务，用于排查重复注册。
+
+        :return: 任务统计与明细
+        """
+        from app.sdk import scheduler as scheduler_sdk  # pylint: disable=import-outside-toplevel
+
+        try:
+            jobs = scheduler_sdk.list_scheduler_jobs() or []
+        except Exception as error:  # pylint: disable=broad-except
+            return {"total": 0, "ours": 0, "error": str(error), "jobs": []}
+        ours = []
+        for job in jobs:
+            identifier = job.get("id") if isinstance(job, dict) else getattr(job, "id", "")
+            if "NewAPICheckin" in str(identifier):
+                ours.append(str(identifier))
+        return {"total": len(jobs), "ours": len(ours), "jobs": ours}
 
     def list_logs(self, limit: int = 50, account_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """
